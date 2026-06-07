@@ -1,36 +1,258 @@
 # Weblacer_AI_infra
 
-Terraform infrastructure for deploying `Weblacer_AI` to AWS in **us-east-1** using:
+Beautiful, practical, and production-minded infrastructure documentation for deploying **`Weblacer_AI`** on **AWS** using **Terraform** and **GitHub Actions**.
 
-- ECS Fargate
-- ECR
-- ALB
-- VPC with public/private subnets
-- CloudWatch Logs
-- IAM
-- ACM certificate resource enabled (not attached to ALB because no custom domain is configured)
-- Terraform remote state with S3 + DynamoDB
-- GitHub Actions CI/CD
-
-## Repos
-
-- App repo: `Sujaltalreja04/Weblacer_AI`
-- Infra repo: `Sujaltalreja04/Weblacer_AI_infra`
-
-## Region / Environment
-
-- Region: `us-east-1`
-- Environment: `prod`
+> This repository owns the **AWS infrastructure and infrastructure automation**.
+> The application code lives separately in [`Sujaltalreja04/Weblacer_AI`](https://github.com/Sujaltalreja04/Weblacer_AI).
 
 ---
 
-## 1) Bootstrap remote state
+## Overview
 
-The bootstrap stack creates:
-- S3 bucket for Terraform state
+This repo provisions and documents the production infrastructure for **Weblacer_AI** in:
+
+- **AWS Region:** `us-east-1` (N. Virginia)
+- **Environment:** `prod`
+- **Compute:** ECS Fargate
+- **Container Registry:** ECR
+- **Ingress:** Application Load Balancer (ALB)
+- **Networking:** VPC with public and private subnets
+- **Logging:** CloudWatch Logs
+- **Terraform State:** S3 + DynamoDB lock table
+- **CI/CD:** GitHub Actions with AWS OIDC role assumption
+
+---
+
+## Repository Relationship
+
+```text
+┌───────────────────────────────┐        ┌────────────────────────────────┐
+│  Weblacer_AI                  │        │  Weblacer_AI_infra             │
+│  (application repository)     │        │  (infrastructure repository)   │
+│                               │        │                                │
+│  - app source code            │        │  - terraform modules           │
+│  - Docker build               │        │  - env configuration           │
+│  - app deployment workflow    │        │  - bootstrap backend           │
+│                               │        │  - infra CI/CD workflows       │
+└───────────────┬───────────────┘        └───────────────┬────────────────┘
+                │                                        │
+                └──────────────┬─────────────────────────┘
+                               │
+                               ▼
+                     ┌───────────────────┐
+                     │       AWS         │
+                     │ ECS / ECR / ALB   │
+                     │ VPC / IAM / Logs  │
+                     └───────────────────┘
+```
+
+### In plain English
+
+- **`Weblacer_AI`** = your product code.
+- **`Weblacer_AI_infra`** = the AWS platform that runs it.
+- App and infra are separated so teams can safely change infrastructure without mixing it with app features.
+
+---
+
+## Architecture Diagram
+
+```text
+                                      GitHub
+                    ┌───────────────────────────────────────────┐
+                    │                                           │
+                    │  Weblacer_AI           Weblacer_AI_infra  │
+                    │  App repo              Infra repo         │
+                    │                                           │
+                    └──────────────┬─────────────────────┬──────┘
+                                   │                     │
+                    app deploy workflow         terraform plan/apply
+                                   │                     │
+                                   ▼                     ▼
+                          ┌─────────────────────────────────────┐
+                          │     GitHub Actions + OIDC to AWS    │
+                          └──────────────────┬──────────────────┘
+                                             │
+                                             ▼
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                                      AWS                                           │
+│                                                                                    │
+│   ┌────────────────────────────── VPC ───────────────────────────────────────────┐ │
+│   │                                                                              │ │
+│   │   Public Subnet A            Public Subnet B                                │ │
+│   │   ┌───────────────┐         ┌───────────────┐                               │ │
+│   │   │ ALB           │         │ ALB           │                               │ │
+│   │   └──────┬────────┘         └───────────────┘                               │ │
+│   │          │                                                                  │ │
+│   │          ▼                                                                  │ │
+│   │   Private Subnet A           Private Subnet B                               │ │
+│   │   ┌───────────────┐         ┌───────────────┐                               │ │
+│   │   │ ECS Task      │         │ ECS Task      │                               │ │
+│   │   │ (Fargate)     │         │ (Fargate)     │                               │ │
+│   │   └───────────────┘         └───────────────┘                               │ │
+│   │                                                                              │ │
+│   │   NAT Gateway in public subnet for outbound internet access                  │ │
+│   └──────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                    │
+│   ECR  <---- stores container images                                               │
+│   CloudWatch Logs <---- stores application logs                                    │
+│   IAM Roles <---- ECS execution/task roles + GitHub OIDC role                      │
+│   S3 + DynamoDB <---- Terraform state + locking                                    │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## What This Infrastructure Creates
+
+### Core platform
+- VPC
+- 2 public subnets
+- 2 private subnets
+- Internet Gateway
+- 1 NAT Gateway
+- Route tables and associations
+
+### Application runtime
+- ECS Cluster
+- ECS Task Definition
+- ECS Fargate Service
+- ECR Repository
+- Application Load Balancer
+- Target Group
+- Security Groups
+- CloudWatch Log Group
+
+### Delivery / access
+- IAM execution role for ECS tasks
+- IAM task role for app runtime permissions
+- GitHub Actions OIDC role for secure AWS access without static long-lived keys
+
+### Terraform operations
+- S3 bucket for remote state
 - DynamoDB table for state locking
 
-Run:
+---
+
+## Current Deployment Flow
+
+### Infrastructure CI/CD flow
+
+```text
+Developer change in infra repo
+          │
+          ▼
+Pull Request opened
+          │
+          ▼
+GitHub Actions: terraform fmt / validate / plan
+          │
+          ▼
+Review + merge to main
+          │
+          ▼
+GitHub Actions: terraform apply
+          │
+          ▼
+AWS infrastructure updated
+```
+
+### Application deployment flow
+
+```text
+Push to Weblacer_AI main branch
+          │
+          ▼
+GitHub Actions builds Docker image
+          │
+          ▼
+Image pushed to ECR
+          │
+          ▼
+ECS service forced to redeploy
+          │
+          ▼
+New containers start behind ALB
+```
+
+---
+
+## Repository Structure
+
+```text
+Weblacer_AI_infra/
+├── README.md
+├── docs/
+│   ├── architecture.md
+│   ├── deployment-flow.md
+│   └── operations.md
+├── bootstrap/
+│   ├── main.tf
+│   ├── outputs.tf
+│   ├── variables.tf
+│   └── versions.tf
+├── modules/
+│   ├── alb/
+│   ├── cloudwatch/
+│   ├── ecr/
+│   ├── ecs/
+│   ├── github_oidc/
+│   └── vpc/
+├── environments/
+│   └── prod/
+│       ├── backend.tf
+│       ├── main.tf
+│       ├── outputs.tf
+│       ├── providers.tf
+│       ├── terraform.tfvars
+│       ├── variables.tf
+│       └── versions.tf
+└── .github/
+    └── workflows/
+        ├── terraform-plan.yml
+        ├── terraform-apply.yml
+        └── app-deploy.yml
+```
+
+---
+
+## Prerequisites
+
+Before using this repo, make sure you have:
+
+### AWS prerequisites
+- Access to the target AWS account
+- Permissions for:
+  - `iam:*`
+  - `ecs:*`
+  - `ecr:*`
+  - `ec2:*`
+  - `elasticloadbalancing:*`
+  - `logs:*`
+  - `s3:*`
+  - `dynamodb:*`
+  - `acm:*` (if HTTPS/domain is added later)
+
+### Local tooling
+- Terraform `>= 1.6.0`
+- AWS CLI
+- Docker
+- Git
+
+### GitHub prerequisites
+- Admin/maintainer access to:
+  - [`Sujaltalreja04/Weblacer_AI`](https://github.com/Sujaltalreja04/Weblacer_AI)
+  - [`Sujaltalreja04/Weblacer_AI_infra`](https://github.com/Sujaltalreja04/Weblacer_AI_infra)
+- Ability to add GitHub Actions secrets
+
+---
+
+## Quick Start
+
+## 1. Bootstrap Terraform remote state
+
+This creates:
+- S3 bucket for Terraform state
+- DynamoDB table for locking
 
 ```bash
 cd bootstrap
@@ -38,11 +260,23 @@ terraform init
 terraform apply -auto-approve
 ```
 
-After apply, copy the output values into `environments/prod/backend.tf` if you change names.
+After bootstrap, note the outputs and update `environments/prod/backend.tf` if required.
 
 ---
 
-## 2) Deploy infrastructure
+## 2. Configure backend state
+
+In `environments/prod/backend.tf`, replace:
+
+```hcl
+bucket = "weblacer-ai-prod-tfstate-REPLACE_ACCOUNT_ID"
+```
+
+with the actual AWS account id-based bucket name created during bootstrap.
+
+---
+
+## 3. Plan and apply the prod infrastructure
 
 ```bash
 cd environments/prod
@@ -53,17 +287,27 @@ terraform apply
 
 ---
 
-## 3) Build and push first app image
+## 4. Capture important Terraform outputs
 
-This stack expects a container image in ECR.
+Useful outputs include:
+- `alb_dns_name`
+- `ecr_repository_name`
+- `ecr_repository_url`
+- `ecs_cluster_name`
+- `ecs_service_name`
+- `github_actions_role_arn`
 
-After infra apply, get the repo URL:
+Example:
 
 ```bash
-terraform output ecr_repository_url
+terraform output
 ```
 
-Then from your app repo build and push:
+---
+
+## 5. Push the first application image
+
+From the app repository:
 
 ```bash
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
@@ -73,55 +317,128 @@ docker tag weblacer-ai:latest <ecr-repo-url>:latest
 docker push <ecr-repo-url>:latest
 ```
 
-Then force a new deployment or let GitHub Actions do it.
+Then redeploy ECS or let GitHub Actions handle it.
 
 ---
 
-## 4) Notes on ACM
+## Configuration Defaults
 
-ACM is included, but because there is **no custom domain** and **no Route53 record**, the certificate is **not bound to the ALB listener**.
-AWS ACM public certificates require DNS validation for real HTTPS custom domains.
+Current defaults in `environments/prod/terraform.tfvars`:
 
-So currently:
-- ALB serves **HTTP on port 80**
-- ACM resource is prepared only as an optional extension path
+- **Region:** `us-east-1`
+- **Environment:** `prod`
+- **Container name:** `weblacer-ai`
+- **Container port:** `3000`
+- **Health check path:** `/`
+- **CPU:** `512`
+- **Memory:** `1024`
+- **Desired count:** `1`
 
-If later you add a domain, you can:
-- request/validate ACM cert for that domain
-- add HTTPS listener on 443
-- attach cert to ALB
+If your app uses another port or health endpoint, update those values before deploying.
+
+---
+
+## GitHub Actions Setup
+
+### Infra repo secrets
+Set these in **`Weblacer_AI_infra`** GitHub Actions secrets:
+
+- `AWS_ROLE_ARN` = Terraform output `github_actions_role_arn`
+- `AWS_REGION` = `us-east-1`
+
+### App repo secrets / variables
+Set these in **`Weblacer_AI`**:
+
+- `AWS_ROLE_ARN`
+- `AWS_REGION`
+- `ECR_REPOSITORY`
+- `ECS_CLUSTER_NAME`
+- `ECS_SERVICE_NAME`
+- `CONTAINER_NAME`
+
+---
+
+## Important Note About ACM / HTTPS
+
+You asked for **Route53 + ACM**, but also said **no custom domain**.
+
+That means:
+- a real public ACM certificate cannot be fully activated yet
+- Route53 also cannot be meaningfully configured yet
+- the current setup should be considered **HTTP-first** until a domain exists
+
+### Today
+- ALB serves traffic on **HTTP 80**
+- ACM is treated as a **future extension path**
+
+### Later, when a domain is available
+You can extend this to:
+- request ACM certificate
+- validate with DNS
 - create Route53 alias record
+- add ALB HTTPS listener on port 443
 
 ---
 
-## 5) GitHub Actions secrets / variables
+## Operational Notes
 
-For this repo (`Weblacer_AI_infra`) set:
-- `AWS_ROLE_ARN` = output `github_actions_role_arn`
-- `AWS_REGION` = `us-east-1`
+### Scaling
+You can later add:
+- ECS Service Auto Scaling
+- CPU or memory-based scaling policies
 
-For app repo (`Weblacer_AI`) set:
-- `AWS_ROLE_ARN` = same role or a separate app deploy role
-- `AWS_REGION` = `us-east-1`
-- `ECR_REPOSITORY` = output `ecr_repository_name`
-- `ECS_CLUSTER_NAME` = output `ecs_cluster_name`
-- `ECS_SERVICE_NAME` = output `ecs_service_name`
-- `CONTAINER_NAME` = `weblacer-ai`
+### Security
+You can later improve with:
+- AWS WAF on ALB
+- Secrets Manager / SSM Parameter Store for app secrets
+- tighter IAM least-privilege policies
+- HTTPS with ACM + domain
+
+### Cost awareness
+Current baseline includes:
+- NAT Gateway
+- ALB
+- ECS Fargate tasks
+- CloudWatch logs
+
+These are solid for production, but keep an eye on AWS costs.
 
 ---
 
-## 6) Suggested next step
+## Suggested Team Usage Model
 
-After provisioning, update your app Dockerfile if needed and confirm:
-- container port
-- health endpoint
-- CPU/memory requirements
-- environment variables / secrets
+- **Infra changes** go through PRs in this repo
+- **Application changes** go through PRs in the app repo
+- Infrastructure is applied from GitHub Actions after review
+- App deployments happen independently from image builds
 
-Defaults in this stack:
-- container port: `3000`
-- health check path: `/`
-- ECS CPU: `512`
-- ECS memory: `1024`
+This separation helps keep deployment and infrastructure safer and easier to understand.
 
-Adjust in `terraform.tfvars` if your app needs something else.
+---
+
+## Documentation Index
+
+Additional docs in this repo:
+
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/deployment-flow.md`](docs/deployment-flow.md)
+- [`docs/operations.md`](docs/operations.md)
+
+---
+
+## Next Recommended Steps
+
+1. Merge the infrastructure PRs into `main`
+2. Run bootstrap Terraform
+3. Update backend state configuration
+4. Apply the prod environment
+5. Add GitHub Actions secrets
+6. Add/verify the app deployment workflow in `Weblacer_AI`
+7. Push the first container image
+8. Validate ALB health checks and logs
+
+---
+
+## Maintainer Note
+
+This documentation update was generated by **Aiden** to make the infrastructure easier for engineers, reviewers, and future maintainers to understand.
