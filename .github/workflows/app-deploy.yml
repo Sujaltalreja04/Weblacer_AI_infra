@@ -1,0 +1,21 @@
+name: App Deploy Reference
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  info:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo
+        run: |
+          echo "This workflow is a reference."
+          echo "Primary application build/deploy should live in the Weblacer_AI app repo."
+          echo "Use outputs from Terraform:"
+          echo "- ECR repository"
+          echo "- ECS cluster/service"
+          echo "- AWS OIDC role"
